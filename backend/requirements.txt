@@ -1,0 +1,7 @@
+# Core dependencies
+databricks-sdk>=0.18.0
+pyyaml>=6.0
+
+# Optional: if you want to use the config in processing scripts
+# pandas>=2.0.0
+# numpy>=1.24.0

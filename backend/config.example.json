@@ -1,0 +1,66 @@
+{
+  "unity_catalog": {
+    "catalog": "main",
+    "schema": "default",
+    "volume": "voice_data"
+  },
+  "audio_processing": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "bit_depth": 16,
+    "transcription_model": "whisper-large-v3",
+    "language": null,
+    "enable_noise_reduction": true,
+    "enable_speaker_diarization": false,
+    "chunk_length_seconds": 30
+  },
+  "graph_rag": {
+    "entity_extraction_model": "llama-3-70b-instruct",
+    "relationship_extraction_model": "llama-3-70b-instruct",
+    "entity_types": [
+      "PERSON",
+      "ORGANIZATION",
+      "LOCATION",
+      "DATE",
+      "EVENT",
+      "CONCEPT"
+    ],
+    "min_entity_confidence": 0.7,
+    "min_relationship_confidence": 0.6,
+    "max_hop_distance": 3,
+    "chunk_size": 512,
+    "chunk_overlap": 50,
+    "embedding_model": "gte-large-en-v1.5",
+    "embedding_dimension": 1024,
+    "vector_store_type": "databricks-vector-search",
+    "vector_index_name": "main.default.voice_embeddings"
+  },
+  "retrieval": {
+    "top_k": 10,
+    "similarity_threshold": 0.7,
+    "rerank_model": "bge-reranker-v2-m3",
+    "generation_model": "llama-3-70b-instruct",
+    "temperature": 0.7,
+    "max_tokens": 1024,
+    "max_context_tokens": 4096,
+    "use_hybrid_search": true,
+    "keyword_weight": 0.3,
+    "semantic_weight": 0.7
+  },
+  "databricks": {
+    "workspace_url": "",
+    "model_serving_endpoint": "voice-rag-endpoint",
+    "graph_data_table": "main.default.graph_data",
+    "transcription_table": "main.default.transcriptions",
+    "metadata_table": "main.default.audio_metadata",
+    "cluster_size": "Medium",
+    "min_workers": 1,
+    "max_workers": 4
+  },
+  "pipeline": {
+    "enable_parallel_processing": true,
+    "batch_size": 10,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 5
+  }
+}
