@@ -1,0 +1,40 @@
+[project]
+name = "voice-to-rag-frontend"
+version = "0.1.0"
+description = "Voice-to-RAG Streamlit Frontend Application"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.28.0",
+    "databricks-sdk>=0.18.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+graph = [
+    "streamlit-agraph>=0.0.45",
+    "pyvis>=0.3.2",
+]
+audio = [
+    "streamlit-webrtc>=0.47.0",
+    "audio-recorder-streamlit>=0.0.8",
+]
+dev = [
+    "ruff>=0.1.0",
+    "pytest>=7.0.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.1.0",
+    "pytest>=7.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+

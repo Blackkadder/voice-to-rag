@@ -1,7 +1,20 @@
 # Core dependencies
 databricks-sdk>=0.18.0
 pyyaml>=6.0
+requests>=2.28.0
 
-# Optional: if you want to use the config in processing scripts
-# pandas>=2.0.0
-# numpy>=1.24.0
+# Vector Search
+databricks-vectorsearch>=0.22
+
+# Delta Lake (for local development)
+delta-spark>=2.4.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Optional: for async operations
+aiohttp>=3.8.0
+
+# Type checking (development)
+typing-extensions>=4.5.0

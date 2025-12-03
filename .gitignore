@@ -205,3 +205,100 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ===========================================
+# Project-specific ignores
+# ===========================================
+
+# Local configuration (keep example files)
+config.json
+config.yaml
+config.yml
+*.local.json
+*.local.yaml
+.env.local
+.env.*.local
+
+# Databricks
+.databricks/
+.databrickscfg
+databricks.yml.local
+*.whl
+
+# Audio/Media files (processed locally)
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.mp4
+*.webm
+*.mpeg
+
+# Data files
+*.parquet
+*.delta/
+data/
+output/
+exports/
+
+# Model files and caches
+models/
+*.onnx
+*.pt
+*.bin
+*.safetensors
+.cache/
+huggingface/
+
+# Vector databases (local)
+*.faiss
+*.index
+chromadb/
+vectorstore/
+
+# Embeddings cache
+embeddings/
+*.npy
+*.npz
+
+# Transcriptions (local output)
+transcriptions/
+*.srt
+*.vtt
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# IDE - VS Code / Cursor
+.vscode/
+.cursor/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# UV (include lock for reproducibility, but ignore cache)
+.uv/
+
+# Secrets and credentials
+secrets/
+*.pem
+*.key
+credentials.json
+service_account.json

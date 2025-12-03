@@ -9,10 +9,20 @@ This Streamlit application provides:
 
 import streamlit as st
 import os
-import json
-from io import BytesIO
+import io
 from datetime import datetime
-import base64
+
+from databricks.sdk import WorkspaceClient
+
+# Initialize Databricks WorkspaceClient
+# Auto-authenticates when running on Databricks Apps
+# For local development, set DATABRICKS_HOST and DATABRICKS_TOKEN env vars
+try:
+    w = WorkspaceClient()
+    databricks_connected = True
+except Exception as e:
+    w = None
+    databricks_connected = False
 
 # Configure page
 st.set_page_config(
@@ -48,9 +58,6 @@ with st.sidebar:
         "Delta Table", 
         value=os.getenv("DELTA_TABLE", "main.default.graph_data")
     )
-    
-    databricks_host = os.getenv("DATABRICKS_HOST", "")
-    databricks_token = os.getenv("DATABRICKS_TOKEN", "")
 
 # Main application tabs
 tab1, tab2, tab3 = st.tabs(["🎤 Voice Recording", "💬 Chat Interface", "📊 Graph Visualization"])
@@ -63,59 +70,80 @@ with tab1:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Record Audio")
+        st.subheader("Upload Audio")
         
-        # Note: Streamlit doesn't have native audio recording
-        # Using audio_recorder component or custom HTML/JS
-        st.info("🎙️ Click the button below to start recording")
+        # Show connection status
+        if databricks_connected:
+            st.success("✅ Connected to Databricks")
+        else:
+            st.warning("⚠️ Not connected to Databricks. Set DATABRICKS_HOST and DATABRICKS_TOKEN environment variables.")
         
-        # Placeholder for audio recorder component
-        # In production, use streamlit-webrtc or audio-recorder-streamlit
+        # File uploader for audio files
         audio_value = st.file_uploader(
-            "Or upload an audio file",
-            type=["wav", "mp3", "m4a", "ogg"],
+            "Select an audio file to upload",
+            type=["wav", "mp3", "m4a", "ogg", "webm"],
             key="audio_upload"
         )
         
         if audio_value is not None:
-            st.audio(audio_value, format=f'audio/{audio_value.type.split("/")[1]}')
+            # Preview the audio
+            st.audio(audio_value)
             
-            upload_button = st.button("Upload to Unity Catalog", key="upload_audio")
+            # Show file info
+            st.caption(f"📄 **File:** {audio_value.name} | **Size:** {audio_value.size:,} bytes")
+            
+            upload_button = st.button("📤 Upload to Unity Catalog", key="upload_audio")
             
             if upload_button:
-                try:
-                    # In production, use Databricks SDK to upload to Unity Catalog
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"recording_{timestamp}.{audio_value.name.split('.')[-1]}"
-                    uc_path = f"/Volumes/{uc_catalog}/{uc_schema}/{uc_volume}/{filename}"
-                    
-                    # Simulated upload
-                    st.session_state.recordings.append({
-                        "filename": filename,
-                        "path": uc_path,
-                        "timestamp": timestamp,
-                        "size": audio_value.size
-                    })
-                    
-                    st.success(f"✅ Uploaded to: {uc_path}")
-                    
-                    # In production:
-                    # from databricks.sdk import WorkspaceClient
-                    # w = WorkspaceClient()
-                    # w.files.upload(uc_path, audio_value.read())
-                    
-                except Exception as e:
-                    st.error(f"❌ Upload failed: {str(e)}")
+                if not databricks_connected:
+                    st.error("❌ Cannot upload: Not connected to Databricks")
+                else:
+                    try:
+                        with st.spinner("Uploading to Unity Catalog..."):
+                            # Read file bytes and wrap in BytesIO
+                            file_bytes = audio_value.read()
+                            binary_data = io.BytesIO(file_bytes)
+                            
+                            # Generate unique filename with timestamp
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            file_extension = audio_value.name.split('.')[-1]
+                            filename = f"recording_{timestamp}.{file_extension}"
+                            
+                            # Construct Unity Catalog volume path
+                            volume_file_path = f"/Volumes/{uc_catalog}/{uc_schema}/{uc_volume}/{filename}"
+                            
+                            # Upload using Databricks SDK
+                            w.files.upload(volume_file_path, binary_data, overwrite=True)
+                            
+                            # Track uploaded recording in session state
+                            st.session_state.recordings.append({
+                                "filename": filename,
+                                "path": volume_file_path,
+                                "timestamp": timestamp,
+                                "size": len(file_bytes),
+                                "original_name": audio_value.name
+                            })
+                            
+                            st.success(f"✅ Uploaded to: `{volume_file_path}`")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Upload failed: {str(e)}")
     
     with col2:
         st.subheader("Uploaded Recordings")
         
         if st.session_state.recordings:
             for idx, recording in enumerate(st.session_state.recordings):
-                with st.expander(f"📁 {recording['filename']}"):
-                    st.write(f"**Path:** {recording['path']}")
-                    st.write(f"**Timestamp:** {recording['timestamp']}")
-                    st.write(f"**Size:** {recording['size']} bytes")
+                with st.expander(f"📁 {recording['filename']}", expanded=(idx == len(st.session_state.recordings) - 1)):
+                    st.write(f"**Original Name:** {recording.get('original_name', 'N/A')}")
+                    st.write(f"**Volume Path:** `{recording['path']}`")
+                    st.write(f"**Uploaded:** {recording['timestamp']}")
+                    st.write(f"**Size:** {recording['size']:,} bytes")
+            
+            # Clear recordings button
+            if st.button("🗑️ Clear Upload History"):
+                st.session_state.recordings = []
+                st.rerun()
         else:
             st.info("No recordings uploaded yet")
 

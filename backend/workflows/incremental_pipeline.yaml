@@ -1,0 +1,77 @@
+# Voice RAG Incremental Pipeline Workflow Definition
+# Optimized for frequent runs with smaller batch sizes
+
+name: voice-rag-incremental
+description: "Incremental RAG pipeline for near-real-time processing"
+
+tags:
+  project: voice-rag
+  pipeline: incremental
+  environment: ${bundle.environment}
+
+# Run every 15 minutes
+schedule:
+  quartz_cron_expression: "0 */15 * * * ?"
+  timezone_id: "UTC"
+  pause_status: UNPAUSED
+
+parameters:
+  - name: catalog
+    default: main
+  - name: schema
+    default: default
+  - name: batch_size
+    default: "100"
+
+job_clusters:
+  - job_cluster_key: incremental_cluster
+    new_cluster:
+      spark_version: "14.3.x-scala2.12"
+      node_type_id: "i3.xlarge"
+      num_workers: 1
+      autotermination_minutes: 10
+      spark_conf:
+        spark.databricks.delta.preview.enabled: "true"
+
+tasks:
+  # Task 1: Incremental Ingestion
+  - task_key: incremental_ingestion
+    description: "Ingest new documents incrementally"
+    job_cluster_key: incremental_cluster
+    notebook_task:
+      notebook_path: /Repos/voice-rag/notebooks/incremental_ingestion
+      base_parameters:
+        catalog: "{{job.parameters.catalog}}"
+        schema: "{{job.parameters.schema}}"
+        batch_size: "{{job.parameters.batch_size}}"
+    timeout_seconds: 900
+
+  # Task 2: Incremental Embedding
+  - task_key: incremental_embedding
+    description: "Generate embeddings for new chunks"
+    depends_on:
+      - task_key: incremental_ingestion
+    job_cluster_key: incremental_cluster
+    notebook_task:
+      notebook_path: /Repos/voice-rag/notebooks/incremental_embedding
+      base_parameters:
+        catalog: "{{job.parameters.catalog}}"
+        schema: "{{job.parameters.schema}}"
+    timeout_seconds: 1200
+
+  # Task 3: Trigger Index Sync
+  - task_key: trigger_sync
+    description: "Trigger vector index sync"
+    depends_on:
+      - task_key: incremental_embedding
+    job_cluster_key: incremental_cluster
+    notebook_task:
+      notebook_path: /Repos/voice-rag/notebooks/trigger_index_sync
+      base_parameters:
+        catalog: "{{job.parameters.catalog}}"
+        schema: "{{job.parameters.schema}}"
+    timeout_seconds: 300
+
+max_concurrent_runs: 1
+format: MULTI_TASK
+

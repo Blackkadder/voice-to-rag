@@ -22,20 +22,38 @@ This is a standalone Streamlit application designed to be hosted on Databricks A
 ## Setup
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Databricks workspace with:
   - Unity Catalog enabled
   - Model serving endpoint deployed
   - Delta table with graph data
 
-### Installation
+### Installation with uv (Recommended)
 
-1. Install dependencies:
+1. Install uv if you haven't already:
 ```bash
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-2. Configure environment variables:
+2. Create virtual environment and install dependencies:
+```bash
+uv sync
+```
+
+3. Install optional dependencies for enhanced features:
+```bash
+# For graph visualization
+uv sync --extra graph
+
+# For audio recording
+uv sync --extra audio
+
+# For all optional features
+uv sync --all-extras
+```
+
+4. Configure environment variables:
 ```bash
 export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
 export DATABRICKS_TOKEN="your-token"
@@ -46,21 +64,55 @@ export MODEL_ENDPOINT="chatbot-endpoint"
 export DELTA_TABLE="main.default.graph_data"
 ```
 
+### Alternative: Installation with pip
+
+```bash
+pip install -r requirements.txt
+```
+
 ### Running Locally
 
 ```bash
+# With uv
+uv run streamlit run app.py
+
+# Or activate the virtual environment first
+source .venv/bin/activate
 streamlit run app.py
 ```
 
 ### Deploying to Databricks Apps
 
-1. Upload the frontend directory to your Databricks workspace
-2. Create a new Databricks App:
+This app includes an `app.yaml` configuration file for Databricks Apps deployment.
+
+1. **Set up secrets in Databricks Apps**:
+   
+   Before deploying, configure the required environment variables as secrets in your Databricks Apps settings:
+   
+   | Secret Name | Description |
+   |-------------|-------------|
+   | `UC_CATALOG` | Unity Catalog catalog name |
+   | `UC_SCHEMA` | Unity Catalog schema name |
+   | `UC_VOLUME` | Unity Catalog volume name for voice data |
+   | `MODEL_ENDPOINT` | Model serving endpoint name |
+   | `DELTA_TABLE` | Full path to Delta table (e.g., `main.default.graph_data`) |
+
+2. **Deploy the app**:
+   - Upload the frontend directory to your Databricks workspace
    - Go to Databricks Apps in your workspace
    - Click "Create App"
-   - Select the app.py file
-   - Configure environment variables in the app settings
-3. Deploy the app
+   - Point to the directory containing `app.yaml`
+   - The app will automatically use the configuration from `app.yaml`
+
+3. **Permissions required for the app service principal**:
+   - `USE CATALOG` on the Unity Catalog catalog
+   - `USE SCHEMA` on the schema
+   - `READ VOLUME` and `WRITE VOLUME` on the volume
+   - Access to the model serving endpoint
+
+The `app.yaml` configures:
+- The Streamlit command to run (`streamlit run app.py --server.port 8000`)
+- Environment variables referenced from Databricks secrets
 
 ## Configuration
 
@@ -107,15 +159,38 @@ All configuration can be done through:
 
 ### Adding Audio Recording Support
 
-To enable in-browser audio recording, uncomment the optional dependencies in `requirements.txt`:
+To enable in-browser audio recording, install the audio extras:
+```bash
+uv sync --extra audio
+```
+
+This includes:
 - `streamlit-webrtc` for WebRTC audio recording
 - `audio-recorder-streamlit` for simple audio recording widget
 
 ### Adding Graph Visualization
 
-For enhanced graph visualization, uncomment these optional dependencies:
+For enhanced graph visualization, install the graph extras:
+```bash
+uv sync --extra graph
+```
+
+This includes:
 - `streamlit-agraph` for network graphs
 - `pyvis` for interactive network visualizations
+
+### Development Setup
+
+Install all dependencies including dev tools:
+```bash
+uv sync --all-extras
+```
+
+Run linting:
+```bash
+uv run ruff check .
+uv run ruff format .
+```
 
 ## Troubleshooting
 

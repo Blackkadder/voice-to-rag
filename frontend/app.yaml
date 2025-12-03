@@ -1,0 +1,19 @@
+command: ['streamlit', 'run', 'app.py', '--server.port', '8000']
+
+env:
+  # Unity Catalog Volume Settings
+  - name: 'UC_CATALOG'
+    valueFrom: 'UC_CATALOG'
+  - name: 'UC_SCHEMA'
+    valueFrom: 'UC_SCHEMA'
+  - name: 'UC_VOLUME'
+    valueFrom: 'UC_VOLUME'
+
+  # Model Serving Settings
+  - name: 'MODEL_ENDPOINT'
+    valueFrom: 'MODEL_ENDPOINT'
+
+  # Graph Data Settings
+  - name: 'DELTA_TABLE'
+    valueFrom: 'DELTA_TABLE'
+
