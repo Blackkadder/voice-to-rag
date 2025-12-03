@@ -11,8 +11,13 @@ import streamlit as st
 import os
 import io
 from datetime import datetime
+from dotenv import load_dotenv
 
 from databricks.sdk import WorkspaceClient
+from audio_recorder_streamlit import audio_recorder
+
+# Load environment variables from .env file (for local development)
+load_dotenv()
 
 # Initialize Databricks WorkspaceClient
 # Auto-authenticates when running on Databricks Apps
@@ -70,13 +75,77 @@ with tab1:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Upload Audio")
+        st.subheader("Record or Upload Audio")
         
         # Show connection status
         if databricks_connected:
             st.success("✅ Connected to Databricks")
         else:
             st.warning("⚠️ Not connected to Databricks. Set DATABRICKS_HOST and DATABRICKS_TOKEN environment variables.")
+        
+        # Audio recorder
+        st.markdown("### 🎙️ Record Audio")
+        audio_bytes = audio_recorder(
+            text="Click to record",
+            recording_color="#e74c3c",
+            neutral_color="#6c757d",
+            icon_name="microphone",
+            icon_size="2x",
+        )
+        
+        # Handle recorded audio
+        if audio_bytes:
+            st.audio(audio_bytes, format="audio/wav")
+            
+            # Store recorded audio in session state for upload
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"recording_{timestamp}.wav"
+            st.session_state.current_recording = {
+                "audio_bytes": audio_bytes,
+                "filename": filename,
+                "size": len(audio_bytes)
+            }
+            
+            st.caption(f"📄 **Recording:** {filename} | **Size:** {len(audio_bytes):,} bytes")
+            
+            upload_recorded_button = st.button("📤 Upload Recording to Unity Catalog", key="upload_recorded")
+            
+            if upload_recorded_button:
+                if not databricks_connected:
+                    st.error("❌ Cannot upload: Not connected to Databricks")
+                else:
+                    try:
+                        with st.spinner("Uploading recording to Unity Catalog..."):
+                            # Wrap recorded audio bytes in BytesIO
+                            binary_data = io.BytesIO(audio_bytes)
+                            
+                            # Construct Unity Catalog volume path
+                            volume_file_path = f"/Volumes/{uc_catalog}/{uc_schema}/{uc_volume}/{filename}"
+                            
+                            # Upload using Databricks SDK
+                            w.files.upload(volume_file_path, binary_data, overwrite=True)
+                            
+                            # Track uploaded recording in session state
+                            st.session_state.recordings.append({
+                                "filename": filename,
+                                "path": volume_file_path,
+                                "timestamp": timestamp,
+                                "size": len(audio_bytes),
+                                "original_name": "Recorded Audio"
+                            })
+                            
+                            # Clear current recording
+                            if "current_recording" in st.session_state:
+                                del st.session_state.current_recording
+                            
+                            st.success(f"✅ Uploaded to: `{volume_file_path}`")
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"❌ Upload failed: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("### 📁 Or Upload Audio File")
         
         # File uploader for audio files
         audio_value = st.file_uploader(
@@ -92,7 +161,7 @@ with tab1:
             # Show file info
             st.caption(f"📄 **File:** {audio_value.name} | **Size:** {audio_value.size:,} bytes")
             
-            upload_button = st.button("📤 Upload to Unity Catalog", key="upload_audio")
+            upload_button = st.button("📤 Upload File to Unity Catalog", key="upload_audio")
             
             if upload_button:
                 if not databricks_connected:
@@ -125,6 +194,7 @@ with tab1:
                             })
                             
                             st.success(f"✅ Uploaded to: `{volume_file_path}`")
+                            st.rerun()
                             
                     except Exception as e:
                         st.error(f"❌ Upload failed: {str(e)}")
