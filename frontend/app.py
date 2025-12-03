@@ -34,8 +34,132 @@ st.set_page_config(
     page_title="Voice-to-RAG",
     page_icon="🎤",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "Voice-to-RAG: Transform voice data into intelligent RAG-powered insights"
+    }
 )
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    /* Main styling */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Header styling */
+    h1 {
+        color: #1f77b4;
+        border-bottom: 3px solid #1f77b4;
+        padding-bottom: 0.5rem;
+    }
+    
+    h2 {
+        color: #2c3e50;
+        margin-top: 1.5rem;
+    }
+    
+    h3 {
+        color: #34495e;
+    }
+    
+    /* Card-like containers */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 20px;
+        border-radius: 8px 8px 0 0;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg {
+        padding-top: 2rem;
+    }
+    
+    /* Metrics styling */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        border-radius: 8px;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.3s;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Success/Error messages */
+    .stSuccess {
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    .stError {
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    /* Info boxes */
+    .stInfo {
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        font-weight: 500;
+    }
+    
+    /* Chat message styling */
+    .stChatMessage {
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+    }
+    
+    /* File uploader styling */
+    .uploadedFile {
+        border-radius: 8px;
+        padding: 1rem;
+        background-color: #f8f9fa;
+        margin: 0.5rem 0;
+    }
+    
+    /* Footer styling */
+    footer {
+        visibility: hidden;
+    }
+    
+    /* Custom divider */
+    hr {
+        margin: 2rem 0;
+        border: none;
+        border-top: 2px solid #e0e0e0;
+    }
+    
+    /* Connection status badge */
+    .connection-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        display: inline-block;
+        font-weight: 500;
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'messages' not in st.session_state:
@@ -45,56 +169,69 @@ if 'recordings' not in st.session_state:
 
 # Sidebar for configuration
 with st.sidebar:
-    st.title("⚙️ Configuration")
+    st.markdown("## 🎤 Voice-to-RAG")
+    st.markdown("---")
     
-    st.subheader("Unity Catalog Settings")
-    uc_catalog = st.text_input("Catalog", value=os.getenv("UC_CATALOG", "main"))
-    uc_schema = st.text_input("Schema", value=os.getenv("UC_SCHEMA", "default"))
-    uc_volume = st.text_input("Volume", value=os.getenv("UC_VOLUME", "voice_data"))
+    # Connection status
+    if databricks_connected:
+        st.success("🟢 **Connected to Databricks**")
+    else:
+        st.warning("🟡 **Not Connected**")
+        st.caption("Set DATABRICKS_HOST and DATABRICKS_TOKEN in .env")
     
-    st.subheader("Model Serving Settings")
-    model_endpoint = st.text_input(
-        "Model Endpoint", 
-        value=os.getenv("MODEL_ENDPOINT", "chatbot-endpoint")
-    )
+    st.markdown("---")
     
-    st.subheader("Graph Data Settings")
-    delta_table = st.text_input(
-        "Delta Table", 
-        value=os.getenv("DELTA_TABLE", "main.default.graph_data")
-    )
+    with st.expander("📦 Unity Catalog Settings", expanded=True):
+        uc_catalog = st.text_input("Catalog", value=os.getenv("UC_CATALOG", "main"), key="uc_catalog")
+        uc_schema = st.text_input("Schema", value=os.getenv("UC_SCHEMA", "default"), key="uc_schema")
+        uc_volume = st.text_input("Volume", value=os.getenv("UC_VOLUME", "voice_data"), key="uc_volume")
+    
+    with st.expander("🤖 Model Serving Settings"):
+        model_endpoint = st.text_input(
+            "Model Endpoint", 
+            value=os.getenv("MODEL_ENDPOINT", "chatbot-endpoint"),
+            key="model_endpoint"
+        )
+    
+    with st.expander("📊 Graph Data Settings"):
+        delta_table = st.text_input(
+            "Delta Table", 
+            value=os.getenv("DELTA_TABLE", "main.default.graph_data"),
+            key="delta_table"
+        )
+    
+    st.markdown("---")
+    st.caption("💡 Configure settings above to customize your workspace")
 
 # Main application tabs
 tab1, tab2, tab3 = st.tabs(["🎤 Voice Recording", "💬 Chat Interface", "📊 Graph Visualization"])
 
 # Tab 1: Voice Recording and Upload
 with tab1:
-    st.header("Voice Recording & Upload")
+    st.markdown("## 🎙️ Voice Recording & Upload")
     st.markdown("Record or upload voice data to Databricks Unity Catalog volume")
+    st.markdown("---")
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([1.2, 1], gap="large")
     
     with col1:
-        st.subheader("Record or Upload Audio")
+        # Audio recorder section
+        st.markdown("### 🎤 Record Audio")
+        st.caption("Click the microphone button below to start recording")
         
-        # Show connection status
-        if databricks_connected:
-            st.success("✅ Connected to Databricks")
-        else:
-            st.warning("⚠️ Not connected to Databricks. Set DATABRICKS_HOST and DATABRICKS_TOKEN environment variables.")
-        
-        # Audio recorder
-        st.markdown("### 🎙️ Record Audio")
-        audio_bytes = audio_recorder(
-            text="Click to record",
-            recording_color="#e74c3c",
-            neutral_color="#6c757d",
-            icon_name="microphone",
-            icon_size="2x",
-        )
+        with st.container():
+            audio_bytes = audio_recorder(
+                text="🎙️ Click to Record",
+                recording_color="#e74c3c",
+                neutral_color="#1f77b4",
+                icon_name="microphone",
+                icon_size="2x",
+            )
         
         # Handle recorded audio
         if audio_bytes:
+            st.markdown("---")
+            st.markdown("**🎵 Recording Preview**")
             st.audio(audio_bytes, format="audio/wav")
             
             # Store recorded audio in session state for upload
@@ -106,9 +243,18 @@ with tab1:
                 "size": len(audio_bytes)
             }
             
-            st.caption(f"📄 **Recording:** {filename} | **Size:** {len(audio_bytes):,} bytes")
+            # File info in a nice container
+            with st.container():
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    st.metric("File Name", filename)
+                with col_info2:
+                    st.metric("Size", f"{len(audio_bytes):,} bytes")
             
-            upload_recorded_button = st.button("📤 Upload Recording to Unity Catalog", key="upload_recorded")
+            upload_recorded_button = st.button("📤 Upload Recording to Unity Catalog", 
+                                                key="upload_recorded",
+                                                type="primary",
+                                                use_container_width=True)
             
             if upload_recorded_button:
                 if not databricks_connected:
@@ -146,22 +292,33 @@ with tab1:
         
         st.markdown("---")
         st.markdown("### 📁 Or Upload Audio File")
+        st.caption("Supported formats: WAV, MP3, M4A, OGG, WEBM")
         
         # File uploader for audio files
         audio_value = st.file_uploader(
-            "Select an audio file to upload",
+            "Choose an audio file",
             type=["wav", "mp3", "m4a", "ogg", "webm"],
-            key="audio_upload"
+            key="audio_upload",
+            label_visibility="collapsed"
         )
         
         if audio_value is not None:
-            # Preview the audio
+            st.markdown("---")
+            st.markdown("**🎵 Audio Preview**")
             st.audio(audio_value)
             
-            # Show file info
-            st.caption(f"📄 **File:** {audio_value.name} | **Size:** {audio_value.size:,} bytes")
+            # File info in a nice container
+            with st.container():
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    st.metric("File Name", audio_value.name)
+                with col_info2:
+                    st.metric("Size", f"{audio_value.size:,} bytes")
             
-            upload_button = st.button("📤 Upload File to Unity Catalog", key="upload_audio")
+            upload_button = st.button("📤 Upload File to Unity Catalog", 
+                                     key="upload_audio",
+                                     type="primary",
+                                     use_container_width=True)
             
             if upload_button:
                 if not databricks_connected:
@@ -200,34 +357,59 @@ with tab1:
                         st.error(f"❌ Upload failed: {str(e)}")
     
     with col2:
-        st.subheader("Uploaded Recordings")
+        st.markdown("### 📚 Uploaded Recordings")
         
         if st.session_state.recordings:
+            st.metric("Total Recordings", len(st.session_state.recordings))
+            st.markdown("---")
+            
             for idx, recording in enumerate(st.session_state.recordings):
                 with st.expander(f"📁 {recording['filename']}", expanded=(idx == len(st.session_state.recordings) - 1)):
-                    st.write(f"**Original Name:** {recording.get('original_name', 'N/A')}")
-                    st.write(f"**Volume Path:** `{recording['path']}`")
-                    st.write(f"**Uploaded:** {recording['timestamp']}")
-                    st.write(f"**Size:** {recording['size']:,} bytes")
+                    col_rec1, col_rec2 = st.columns(2)
+                    with col_rec1:
+                        st.caption("**Original Name**")
+                        st.write(recording.get('original_name', 'N/A'))
+                    with col_rec2:
+                        st.caption("**Size**")
+                        st.write(f"{recording['size']:,} bytes")
+                    
+                    st.caption("**Volume Path**")
+                    st.code(recording['path'], language=None)
+                    
+                    st.caption("**Uploaded**")
+                    st.write(recording['timestamp'])
             
+            st.markdown("---")
             # Clear recordings button
-            if st.button("🗑️ Clear Upload History"):
+            if st.button("🗑️ Clear Upload History", use_container_width=True):
                 st.session_state.recordings = []
                 st.rerun()
         else:
-            st.info("No recordings uploaded yet")
+            st.info("📭 No recordings uploaded yet. Record or upload audio to get started!")
 
 # Tab 2: Chat Interface
 with tab2:
-    st.header("Chat Interface")
+    st.markdown("## 💬 Chat Interface")
     st.markdown("Chat with the RAG system backed by Databricks model serving")
+    st.markdown("---")
+    
+    # Display connection status
+    if databricks_connected:
+        st.success(f"🟢 Connected | Endpoint: `{model_endpoint}`")
+    else:
+        st.warning("🟡 Not connected to Databricks")
+    
+    st.markdown("---")
     
     # Display chat messages
     chat_container = st.container()
     with chat_container:
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+        if not st.session_state.messages:
+            st.info("👋 Start a conversation! Ask questions about your voice data.")
+        else:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Ask a question about your voice data..."):
@@ -268,32 +450,44 @@ with tab2:
                     })
     
     # Clear chat button
-    if st.button("Clear Chat History"):
-        st.session_state.messages = []
-        st.rerun()
+    if st.session_state.messages:
+        st.markdown("---")
+        col_clear1, col_clear2, col_clear3 = st.columns([1, 1, 1])
+        with col_clear2:
+            if st.button("🗑️ Clear Chat History", use_container_width=True):
+                st.session_state.messages = []
+                st.rerun()
 
 # Tab 3: Graph Visualization
 with tab3:
-    st.header("Graph Visualization")
+    st.markdown("## 📊 Graph Visualization")
     st.markdown("Interactive visualization of graph data from Databricks Delta table")
+    st.markdown("---")
     
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([3, 1], gap="large")
     
     with col2:
-        st.subheader("Settings")
+        st.markdown("### ⚙️ Settings")
+        st.markdown("---")
+        
         layout_type = st.selectbox(
-            "Layout",
+            "Layout Type",
             ["force", "circular", "hierarchical", "random"],
-            index=0
+            index=0,
+            help="Choose the graph layout algorithm"
         )
+        
+        st.markdown("---")
         
         show_labels = st.checkbox("Show Labels", value=True)
         show_edges = st.checkbox("Show Edges", value=True)
         
-        refresh_button = st.button("🔄 Refresh Data")
+        st.markdown("---")
+        
+        refresh_button = st.button("🔄 Refresh Data", use_container_width=True, type="primary")
     
     with col1:
-        st.subheader(f"Graph from {delta_table}")
+        st.markdown(f"### 📈 Graph from `{delta_table}`")
         
         try:
             # In production, query Delta table from Databricks
@@ -320,8 +514,10 @@ with tab3:
             }
             
             # Display graph using streamlit-agraph or pyvis
-            st.info("📊 Graph visualization placeholder")
-            st.json(graph_data)
+            st.info("📊 Graph visualization placeholder - Install graph extras for interactive visualization")
+            
+            with st.expander("📋 View Graph Data (JSON)", expanded=False):
+                st.json(graph_data)
             
             # In production, use a graph visualization library
             # from streamlit_agraph import agraph, Node, Edge, Config
@@ -330,7 +526,8 @@ with tab3:
             # config = Config(width=750, height=600, directed=True)
             # agraph(nodes=nodes, edges=edges, config=config)
             
-            st.markdown("**Graph Statistics:**")
+            st.markdown("---")
+            st.markdown("### 📊 Graph Statistics")
             metrics_cols = st.columns(3)
             metrics_cols[0].metric("Nodes", len(graph_data["nodes"]))
             metrics_cols[1].metric("Edges", len(graph_data["edges"]))
@@ -341,7 +538,14 @@ with tab3:
 
 # Footer
 st.markdown("---")
-st.markdown(
-    "**Voice-to-RAG** | Powered by Databricks | "
-    "[Documentation](https://github.com/Blackkadder/voice-to-rag)"
-)
+footer_col1, footer_col2, footer_col3 = st.columns(3)
+with footer_col2:
+    st.markdown(
+        """
+        <div style='text-align: center; color: #666; padding: 1rem;'>
+            <strong>Voice-to-RAG</strong> | Powered by Databricks<br>
+            <a href='https://github.com/Blackkadder/voice-to-rag' style='color: #1f77b4; text-decoration: none;'>📚 Documentation</a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
