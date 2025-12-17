@@ -182,7 +182,7 @@ with st.sidebar:
     st.markdown("---")
     
     with st.expander("📦 Unity Catalog Settings", expanded=True):
-        uc_catalog = st.text_input("Catalog", value=os.getenv("UC_CATALOG", "main"), key="uc_catalog")
+        uc_catalog = st.text_input("Catalog", value=os.getenv("UC_CATALOG", "voice_graph_rag"), key="uc_catalog")
         uc_schema = st.text_input("Schema", value=os.getenv("UC_SCHEMA", "default"), key="uc_schema")
         uc_volume = st.text_input("Volume", value=os.getenv("UC_VOLUME", "voice_data"), key="uc_volume")
     
@@ -196,7 +196,7 @@ with st.sidebar:
     with st.expander("📊 Graph Data Settings"):
         delta_table = st.text_input(
             "Delta Table", 
-            value=os.getenv("DELTA_TABLE", "main.default.graph_data"),
+            value=os.getenv("DELTA_TABLE", "voice_graph_rag.default.graph_data"),
             key="delta_table"
         )
     

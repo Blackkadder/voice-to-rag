@@ -9,4 +9,4 @@ numpy>=1.24.0
 
 # Optional: for audio recording in browser
 # streamlit-webrtc>=0.47.0
-# audio-recorder-streamlit>=0.0.8
+audio-recorder-streamlit>=0.0.8

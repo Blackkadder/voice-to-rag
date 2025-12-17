@@ -13,7 +13,7 @@ import os
 @dataclass
 class UnityConfigConfig:
     """Configuration for Unity Catalog storage"""
-    catalog: str = field(default="main")
+    catalog: str = field(default="voice_graph_rag")
     schema: str = field(default="default")
     volume: str = field(default="voice_data")
     
@@ -74,7 +74,7 @@ class GraphRAGConfig:
     
     # Vector store
     vector_store_type: str = field(default="databricks-vector-search")
-    vector_index_name: str = field(default="main.default.voice_embeddings")
+    vector_index_name: str = field(default="voice_graph_rag.default.voice_embeddings")
 
 
 @dataclass
@@ -109,9 +109,9 @@ class DatabricksConfig:
     model_serving_endpoint: str = field(default="voice-rag-endpoint")
     
     # Delta tables
-    graph_data_table: str = field(default="main.default.graph_data")
-    transcription_table: str = field(default="main.default.transcriptions")
-    metadata_table: str = field(default="main.default.audio_metadata")
+    graph_data_table: str = field(default="voice_graph_rag.default.graph_data")
+    transcription_table: str = field(default="voice_graph_rag.default.transcriptions")
+    metadata_table: str = field(default="voice_graph_rag.default.audio_metadata")
     
     # Job configuration
     cluster_size: str = field(default="Medium")

@@ -1,6 +1,6 @@
 {
   "unity_catalog": {
-    "catalog": "main",
+    "catalog": "voice_graph_rag",
     "schema": "default",
     "volume": "voice_data"
   },
@@ -33,7 +33,7 @@
     "embedding_model": "gte-large-en-v1.5",
     "embedding_dimension": 1024,
     "vector_store_type": "databricks-vector-search",
-    "vector_index_name": "main.default.voice_embeddings"
+    "vector_index_name": "voice_graph_rag.default.voice_embeddings"
   },
   "retrieval": {
     "top_k": 10,
@@ -50,9 +50,9 @@
   "databricks": {
     "workspace_url": "",
     "model_serving_endpoint": "voice-rag-endpoint",
-    "graph_data_table": "main.default.graph_data",
-    "transcription_table": "main.default.transcriptions",
-    "metadata_table": "main.default.audio_metadata",
+    "graph_data_table": "voice_graph_rag.default.graph_data",
+    "transcription_table": "voice_graph_rag.default.transcriptions",
+    "metadata_table": "voice_graph_rag.default.audio_metadata",
     "cluster_size": "Medium",
     "min_workers": 1,
     "max_workers": 4
