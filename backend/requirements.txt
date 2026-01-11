@@ -18,3 +18,18 @@ aiohttp>=3.8.0
 
 # Type checking (development)
 typing-extensions>=4.5.0
+
+# LangChain and Agent dependencies
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.20
+
+# Graph database connectivity
+gremlinpython>=3.7.0
+
+# PuppyGraph (install from source or PyPI when available)
+# Note: PuppyGraph Python client may need to be installed separately
+# pip install puppygraph-python
+
+# PySpark (if not already available in environment)
+pyspark>=3.5.0

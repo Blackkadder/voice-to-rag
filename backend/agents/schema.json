@@ -1,0 +1,170 @@
+{
+  "catalogs": [
+    {
+      "name": "puppygraph",
+      "type": "deltalake",
+      "metastore": {
+        "type": "unity",
+        "host": "${DATABRICKS_HOST}",
+        "token": "${DATABRICKS_TOKEN}",
+        "databricksCatalogName": "${UC_CATALOG}"
+      }
+    }
+  ],
+  "graph": {
+    "vertices": [
+      {
+        "label": "person",
+        "oneToOne": {
+          "tableSource": {
+            "catalog": "puppygraph",
+            "schema": "${UC_SCHEMA}",
+            "table": "person"
+          },
+          "id": {
+            "fields": [
+              {
+                "type": "String",
+                "field": "id",
+                "alias": "id"
+              }
+            ]
+          },
+          "attributes": [
+            {
+              "type": "Int",
+              "field": "age",
+              "alias": "age"
+            },
+            {
+              "type": "String",
+              "field": "name",
+              "alias": "name"
+            }
+          ]
+        }
+      },
+      {
+        "label": "software",
+        "oneToOne": {
+          "tableSource": {
+            "catalog": "puppygraph",
+            "schema": "${UC_SCHEMA}",
+            "table": "software"
+          },
+          "id": {
+            "fields": [
+              {
+                "type": "String",
+                "field": "id",
+                "alias": "id"
+              }
+            ]
+          },
+          "attributes": [
+            {
+              "type": "String",
+              "field": "lang",
+              "alias": "lang"
+            },
+            {
+              "type": "String",
+              "field": "name",
+              "alias": "name"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [
+      {
+        "label": "knowns",
+        "fromVertex": "person",
+        "toVertex": "person",
+        "tableSource": {
+          "catalog": "puppygraph",
+          "schema": "${UC_SCHEMA}",
+          "table": "knowns"
+        },
+        "id": {
+          "fields": [
+            {
+              "type": "String",
+              "field": "id",
+              "alias": "id"
+            }
+          ]
+        },
+        "fromId": {
+          "fields": [
+            {
+              "type": "String",
+              "field": "from_id",
+              "alias": "from_id"
+            }
+          ]
+        },
+        "toId": {
+          "fields": [
+            {
+              "type": "String",
+              "field": "to_id",
+              "alias": "to_id"
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "type": "Double",
+            "field": "weight",
+            "alias": "weight"
+          }
+        ]
+      },
+      {
+        "label": "created",
+        "fromVertex": "person",
+        "toVertex": "software",
+        "tableSource": {
+          "catalog": "puppygraph",
+          "schema": "${UC_SCHEMA}",
+          "table": "created"
+        },
+        "id": {
+          "fields": [
+            {
+              "type": "String",
+              "field": "id",
+              "alias": "id"
+            }
+          ]
+        },
+        "fromId": {
+          "fields": [
+            {
+              "type": "String",
+              "field": "from_id",
+              "alias": "from_id"
+            }
+          ]
+        },
+        "toId": {
+          "fields": [
+            {
+              "type": "String",
+              "field": "to_id",
+              "alias": "to_id"
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "type": "Double",
+            "field": "weight",
+            "alias": "weight"
+          }
+        ]
+      }
+    ]
+  }
+}
