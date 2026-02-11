@@ -57,11 +57,11 @@ uv sync --all-extras
 ```bash
 export DATABRICKS_HOST="https://your-workspace.cloud.databricks.com"
 export DATABRICKS_TOKEN="your-token"
-export UC_CATALOG="main"
+export UC_CATALOG="voice_rag"
 export UC_SCHEMA="default"
 export UC_VOLUME="voice_data"
 export MODEL_ENDPOINT="chatbot-endpoint"
-export DELTA_TABLE="main.default.graph_data"
+export DELTA_TABLE="voice_rag.default.graph_data"
 ```
 
 ### Alternative: Installation with pip

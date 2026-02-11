@@ -10,11 +10,16 @@ This Streamlit application provides:
 import streamlit as st
 import os
 import io
+import re
 from datetime import datetime
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from databricks.sdk import WorkspaceClient
 from audio_recorder_streamlit import audio_recorder
+
+# Upload timeout in seconds
+UPLOAD_TIMEOUT = 30
 
 # Load environment variables from .env file (for local development)
 load_dotenv()
@@ -29,12 +34,19 @@ except Exception as e:
     w = None
     databricks_connected = False
 
+# Get UC settings from environment
+UC_CATALOG = os.getenv("UC_CATALOG", "voice_rag")
+UC_SCHEMA = os.getenv("UC_SCHEMA", "default")
+UC_VOLUME = os.getenv("UC_VOLUME", "voice_data")
+MODEL_ENDPOINT = os.getenv("MODEL_ENDPOINT", "chatbot-endpoint")
+DELTA_TABLE = os.getenv("DELTA_TABLE", "voice_rag.default.graph_data")
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", "unknown")
 # Configure page
 st.set_page_config(
     page_title="Voice-to-RAG",
     page_icon="🎤",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
     menu_items={
         'Get Help': None,
         'Report a bug': None,
@@ -150,13 +162,25 @@ st.markdown("""
         border-top: 2px solid #e0e0e0;
     }
     
-    /* Connection status badge */
-    .connection-badge {
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        display: inline-block;
-        font-weight: 500;
-        margin-bottom: 1rem;
+    /* Landing page styling */
+    .landing-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    .session-card {
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+        margin: 0.5rem 0;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .session-card:hover {
+        border-color: #1f77b4;
+        background-color: #f8f9fa;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -166,50 +190,281 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'recordings' not in st.session_state:
     st.session_state.recordings = []
+if 'current_session' not in st.session_state:
+    st.session_state.current_session = None
+if 'landing_view' not in st.session_state:
+    st.session_state.landing_view = 'choose'  # 'choose', 'new', 'existing'
 
-# Sidebar for configuration
-with st.sidebar:
-    st.markdown("## 🎤 Voice-to-RAG")
-    st.markdown("---")
+
+# ============================================================================
+# Session Management Helper Functions
+# ============================================================================
+
+def get_volume_base_path():
+    """Get the base path for the UC volume."""
+    print(f"Getting volume base path: /Volumes/{UC_CATALOG}/{UC_SCHEMA}/{UC_VOLUME}")
+    return f"/Volumes/{UC_CATALOG}/{UC_SCHEMA}/{UC_VOLUME}"
+
+
+def list_existing_sessions():
+    """List existing session folders from the UC volume."""
+    if not databricks_connected or w is None:
+        return []
     
-    # Connection status
-    if databricks_connected:
-        st.success("🟢 **Connected to Databricks**")
+    
+    volume_path = get_volume_base_path()
+    contents = w.files.list_directory_contents(volume_path)
+    sessions = []
+    for item in contents:
+        # Extract folder name from path
+        if item.is_directory:
+            folder_name = item.path.rstrip('/').split('/')[-1]
+            sessions.append(folder_name)
+    return sorted(sessions)
+
+
+def create_session_folder(session_name):
+    """
+    Validate session can be created. 
+    The actual folder is created automatically on first file upload.
+    """
+    # We don't pre-create the folder - UC volumes create directories automatically
+    # when uploading files with w.files.upload()
+    session_path = f"{get_volume_base_path()}/{session_name}"
+    return True, session_path
+
+
+def validate_session_name(name):
+    """Validate session name for use as a folder name."""
+    if not name or not name.strip():
+        return False, "Session name cannot be empty"
+    
+    name = name.strip()
+    
+    # Check for invalid characters
+    if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        return False, "Session name can only contain letters, numbers, underscores, and hyphens"
+    
+    if len(name) > 100:
+        return False, "Session name must be 100 characters or less"
+    
+    return True, name
+
+
+def switch_session():
+    """Clear current session and return to landing page."""
+    st.session_state.current_session = None
+    st.session_state.landing_view = 'choose'
+    st.session_state.messages = []
+    st.session_state.recordings = []
+
+
+def upload_file_with_timeout(file_path, binary_data, timeout=UPLOAD_TIMEOUT):
+    """Upload file to UC volume with timeout."""
+    if not databricks_connected or w is None:
+        raise Exception("Not connected to Databricks")
+    
+    def do_upload():
+        print(f"Uploading file to {file_path}")
+        w.files.upload(file_path, binary_data, overwrite=True)
+        print(f"Upload complete: {file_path}")
+    
+    # Don't use context manager - it waits for threads to finish even after timeout
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(do_upload)
+    try:
+        future.result(timeout=timeout)
+        executor.shutdown(wait=False)
+        return True
+    except FuturesTimeoutError:
+        # Shutdown without waiting - let the thread die on its own
+        executor.shutdown(wait=False)
+        raise Exception(f"Upload timed out after {timeout} seconds")
+
+
+# ============================================================================
+# Landing Page
+# ============================================================================
+
+def render_landing_page():
+    """Render the session selection landing page."""
+    
+    # Centered container
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("# 🎤 Voice-to-RAG")
+        st.markdown("Transform voice data into intelligent RAG-powered insights")
+        st.markdown("---")
+        
+        # Connection status
+        if databricks_connected:
+            st.success(f"🟢 Connected to Databricks {DATABRICKS_HOST}")
+        else:
+            st.warning("🟡 Not connected to Databricks")
+            st.caption("Set DATABRICKS_HOST and DATABRICKS_TOKEN in .env for local development")
+        
+        st.markdown("---")
+        
+        # Landing view state machine
+        if st.session_state.landing_view == 'choose':
+            render_choice_view()
+        elif st.session_state.landing_view == 'new':
+            render_new_session_view()
+        elif st.session_state.landing_view == 'existing':
+            render_existing_sessions_view()
+
+
+def render_choice_view():
+    """Render the initial choice between new and existing session."""
+    st.markdown("### Get Started")
+    st.markdown("Choose how you'd like to begin:")
+    
+    st.markdown("")
+    
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        if st.button("➕ Create New Session", use_container_width=True, type="primary"):
+            st.session_state.landing_view = 'new'
+            st.rerun()
+    
+    with col_btn2:
+        if st.button("📂 Open Existing Session", use_container_width=True):
+            st.session_state.landing_view = 'existing'
+            st.rerun()
+
+
+def render_new_session_view():
+    """Render the new session creation form."""
+    st.markdown("### Create New Session")
+    st.markdown("Enter a name for your new session:")
+    
+    # Back button
+    if st.button("← Back"):
+        st.session_state.landing_view = 'choose'
+        st.rerun()
+    
+    st.markdown("")
+    
+    # Session name input
+    session_name = st.text_input(
+        "Session Name",
+        placeholder="e.g., interview_2024, meeting_notes, research_data",
+        key="new_session_name",
+        help="Use letters, numbers, underscores, and hyphens only"
+    )
+    
+    st.markdown("")
+    
+    if st.button("Create Session", type="primary", use_container_width=True):
+        if session_name:
+            valid, result = validate_session_name(session_name)
+            if valid:
+                # Set session - folder will be created on first upload
+                st.session_state.current_session = result
+                st.session_state.landing_view = 'choose'
+                st.rerun()
+            else:
+                st.error(f"❌ {result}")
+        else:
+            st.error("❌ Please enter a session name")
+
+
+def render_existing_sessions_view():
+    """Render the existing sessions list."""
+    st.markdown("### Select Existing Session")
+    
+    # Back button
+    if st.button("← Back"):
+        st.session_state.landing_view = 'choose'
+        st.rerun()
+    
+    st.markdown("")
+    
+    # Fetch existing sessions
+    sessions = list_existing_sessions()
+    
+    if not sessions:
+        st.info("📭 No existing sessions found. Create a new session to get started!")
+        st.markdown("")
+        if st.button("➕ Create New Session", type="primary"):
+            st.session_state.landing_view = 'new'
+            st.rerun()
     else:
-        st.warning("🟡 **Not Connected**")
-        st.caption("Set DATABRICKS_HOST and DATABRICKS_TOKEN in .env")
-    
-    st.markdown("---")
-    
-    with st.expander("📦 Unity Catalog Settings", expanded=True):
-        uc_catalog = st.text_input("Catalog", value=os.getenv("UC_CATALOG", "voice_graph_rag"), key="uc_catalog")
-        uc_schema = st.text_input("Schema", value=os.getenv("UC_SCHEMA", "default"), key="uc_schema")
-        uc_volume = st.text_input("Volume", value=os.getenv("UC_VOLUME", "voice_data"), key="uc_volume")
-    
-    with st.expander("🤖 Model Serving Settings"):
-        model_endpoint = st.text_input(
-            "Model Endpoint", 
-            value=os.getenv("MODEL_ENDPOINT", "chatbot-endpoint"),
-            key="model_endpoint"
-        )
-    
-    with st.expander("📊 Graph Data Settings"):
-        delta_table = st.text_input(
-            "Delta Table", 
-            value=os.getenv("DELTA_TABLE", "voice_graph_rag.default.graph_data"),
-            key="delta_table"
-        )
-    
-    st.markdown("---")
-    st.caption("💡 Configure settings above to customize your workspace")
+        st.markdown(f"Found **{len(sessions)}** session(s):")
+        st.markdown("")
+        
+        for session in sessions:
+            col_name, col_btn = st.columns([3, 1])
+            with col_name:
+                st.markdown(f"📁 **{session}**")
+            with col_btn:
+                if st.button("Open", key=f"open_{session}", use_container_width=True):
+                    st.session_state.current_session = session
+                    st.rerun()
 
-# Main application tabs
-tab1, tab2, tab3 = st.tabs(["🎤 Voice Recording", "💬 Chat Interface", "📊 Graph Visualization"])
 
-# Tab 1: Voice Recording and Upload
-with tab1:
+# ============================================================================
+# Main Application (after session selected)
+# ============================================================================
+
+def render_main_app():
+    """Render the main application after a session is selected."""
+    
+    current_session = st.session_state.current_session
+    
+    # Sidebar with session info and switch option
+    with st.sidebar:
+        st.markdown("## 🎤 Voice-to-RAG")
+        st.markdown("---")
+        
+        # Current session display
+        st.markdown("### 📁 Current Session")
+        st.info(f"**{current_session}**")
+        
+        if st.button("🔄 Switch Session", use_container_width=True):
+            switch_session()
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Connection status
+        if databricks_connected:
+            st.success("🟢 **Connected**")
+        else:
+            st.warning("🟡 **Not Connected**")
+        
+        st.markdown("---")
+        
+        with st.expander("⚙️ Settings", expanded=False):
+            st.caption("**Unity Catalog**")
+            st.code(f"{UC_CATALOG}.{UC_SCHEMA}.{UC_VOLUME}", language=None)
+            st.caption("**Model Endpoint**")
+            st.code(MODEL_ENDPOINT, language=None)
+            st.caption("**Delta Table**")
+            st.code(DELTA_TABLE, language=None)
+    
+    # Main application tabs
+    tab1, tab2, tab3 = st.tabs(["🎤 Voice Recording", "💬 Chat Interface", "📊 Graph Visualization"])
+    
+    # Tab 1: Voice Recording and Upload
+    with tab1:
+        render_voice_recording_tab(current_session)
+    
+    # Tab 2: Chat Interface
+    with tab2:
+        render_chat_tab()
+    
+    # Tab 3: Graph Visualization
+    with tab3:
+        render_graph_tab()
+
+
+def render_voice_recording_tab(current_session):
+    """Render the voice recording tab."""
     st.markdown("## 🎙️ Voice Recording & Upload")
-    st.markdown("Record or upload voice data to Databricks Unity Catalog volume")
+    st.markdown(f"Recording to session: **{current_session}**")
     st.markdown("---")
     
     col1, col2 = st.columns([1.2, 1], gap="large")
@@ -228,28 +483,37 @@ with tab1:
                 icon_size="2x",
             )
         
-        # Handle recorded audio
+        # Handle recorded audio - update session state if new recording
         if audio_bytes:
-            st.markdown("---")
-            st.markdown("**🎵 Recording Preview**")
-            st.audio(audio_bytes, format="audio/wav")
-            
             # Store recorded audio in session state for upload
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"recording_{timestamp}.wav"
             st.session_state.current_recording = {
                 "audio_bytes": audio_bytes,
                 "filename": filename,
-                "size": len(audio_bytes)
+                "size": len(audio_bytes),
+                "timestamp": timestamp
             }
+        
+        # Show recording UI if we have a recording (from audio_bytes OR session state)
+        if st.session_state.get("current_recording"):
+            recording = st.session_state.current_recording
+            recording_bytes = recording["audio_bytes"]
+            recording_filename = recording["filename"]
+            recording_size = recording["size"]
+            recording_timestamp = recording["timestamp"]
+            
+            st.markdown("---")
+            st.markdown("**🎵 Recording Preview**")
+            st.audio(recording_bytes, format="audio/wav")
             
             # File info in a nice container
             with st.container():
                 col_info1, col_info2 = st.columns(2)
                 with col_info1:
-                    st.metric("File Name", filename)
+                    st.metric("File Name", recording_filename)
                 with col_info2:
-                    st.metric("Size", f"{len(audio_bytes):,} bytes")
+                    st.metric("Size", f"{recording_size:,} bytes")
             
             upload_recorded_button = st.button("📤 Upload Recording to Unity Catalog", 
                                                 key="upload_recorded",
@@ -261,28 +525,27 @@ with tab1:
                     st.error("❌ Cannot upload: Not connected to Databricks")
                 else:
                     try:
-                        with st.spinner("Uploading recording to Unity Catalog..."):
+                        with st.spinner(f"Uploading recording to Unity Catalog (timeout: {UPLOAD_TIMEOUT}s)..."):
                             # Wrap recorded audio bytes in BytesIO
-                            binary_data = io.BytesIO(audio_bytes)
+                            binary_data = io.BytesIO(recording_bytes)
                             
-                            # Construct Unity Catalog volume path
-                            volume_file_path = f"/Volumes/{uc_catalog}/{uc_schema}/{uc_volume}/{filename}"
+                            # Construct Unity Catalog volume path WITH session folder
+                            volume_file_path = f"{get_volume_base_path()}/{current_session}/{recording_filename}"
                             
-                            # Upload using Databricks SDK
-                            w.files.upload(volume_file_path, binary_data, overwrite=True)
+                            # Upload using Databricks SDK with timeout
+                            upload_file_with_timeout(volume_file_path, binary_data)
                             
                             # Track uploaded recording in session state
                             st.session_state.recordings.append({
-                                "filename": filename,
+                                "filename": recording_filename,
                                 "path": volume_file_path,
-                                "timestamp": timestamp,
-                                "size": len(audio_bytes),
+                                "timestamp": recording_timestamp,
+                                "size": recording_size,
                                 "original_name": "Recorded Audio"
                             })
                             
                             # Clear current recording
-                            if "current_recording" in st.session_state:
-                                del st.session_state.current_recording
+                            del st.session_state.current_recording
                             
                             st.success(f"✅ Uploaded to: `{volume_file_path}`")
                             st.rerun()
@@ -325,7 +588,7 @@ with tab1:
                     st.error("❌ Cannot upload: Not connected to Databricks")
                 else:
                     try:
-                        with st.spinner("Uploading to Unity Catalog..."):
+                        with st.spinner(f"Uploading to Unity Catalog (timeout: {UPLOAD_TIMEOUT}s)..."):
                             # Read file bytes and wrap in BytesIO
                             file_bytes = audio_value.read()
                             binary_data = io.BytesIO(file_bytes)
@@ -335,11 +598,11 @@ with tab1:
                             file_extension = audio_value.name.split('.')[-1]
                             filename = f"recording_{timestamp}.{file_extension}"
                             
-                            # Construct Unity Catalog volume path
-                            volume_file_path = f"/Volumes/{uc_catalog}/{uc_schema}/{uc_volume}/{filename}"
+                            # Construct Unity Catalog volume path WITH session folder
+                            volume_file_path = f"{get_volume_base_path()}/{current_session}/{filename}"
                             
-                            # Upload using Databricks SDK
-                            w.files.upload(volume_file_path, binary_data, overwrite=True)
+                            # Upload using Databricks SDK with timeout
+                            upload_file_with_timeout(volume_file_path, binary_data)
                             
                             # Track uploaded recording in session state
                             st.session_state.recordings.append({
@@ -387,15 +650,16 @@ with tab1:
         else:
             st.info("📭 No recordings uploaded yet. Record or upload audio to get started!")
 
-# Tab 2: Chat Interface
-with tab2:
+
+def render_chat_tab():
+    """Render the chat interface tab."""
     st.markdown("## 💬 Chat Interface")
     st.markdown("Chat with the RAG system backed by Databricks model serving")
     st.markdown("---")
     
     # Display connection status
     if databricks_connected:
-        st.success(f"🟢 Connected | Endpoint: `{model_endpoint}`")
+        st.success(f"🟢 Connected | Endpoint: `{MODEL_ENDPOINT}`")
     else:
         st.warning("🟡 Not connected to Databricks")
     
@@ -425,15 +689,13 @@ with tab2:
             with st.spinner("Thinking..."):
                 try:
                     # In production, call Databricks model serving endpoint
-                    # from databricks.sdk import WorkspaceClient
-                    # w = WorkspaceClient()
                     # response = w.serving_endpoints.query(
-                    #     name=model_endpoint,
+                    #     name=MODEL_ENDPOINT,
                     #     inputs=[{"query": prompt}]
                     # )
                     
                     # Simulated response
-                    response_text = f"This is a simulated response to: '{prompt}'. In production, this would query the Databricks model serving endpoint '{model_endpoint}'."
+                    response_text = f"This is a simulated response to: '{prompt}'. In production, this would query the Databricks model serving endpoint '{MODEL_ENDPOINT}'."
                     
                     st.markdown(response_text)
                     st.session_state.messages.append({
@@ -458,8 +720,9 @@ with tab2:
                 st.session_state.messages = []
                 st.rerun()
 
-# Tab 3: Graph Visualization
-with tab3:
+
+def render_graph_tab():
+    """Render the graph visualization tab."""
     st.markdown("## 📊 Graph Visualization")
     st.markdown("Interactive visualization of graph data from Databricks Delta table")
     st.markdown("---")
@@ -487,13 +750,11 @@ with tab3:
         refresh_button = st.button("🔄 Refresh Data", use_container_width=True, type="primary")
     
     with col1:
-        st.markdown(f"### 📈 Graph from `{delta_table}`")
+        st.markdown(f"### 📈 Graph from `{DELTA_TABLE}`")
         
         try:
             # In production, query Delta table from Databricks
-            # from databricks.sdk import WorkspaceClient
-            # w = WorkspaceClient()
-            # df = spark.table(delta_table).toPandas()
+            # df = spark.table(DELTA_TABLE).toPandas()
             
             # Simulated graph data
             graph_data = {
@@ -519,13 +780,6 @@ with tab3:
             with st.expander("📋 View Graph Data (JSON)", expanded=False):
                 st.json(graph_data)
             
-            # In production, use a graph visualization library
-            # from streamlit_agraph import agraph, Node, Edge, Config
-            # nodes = [Node(id=n["id"], label=n["label"], size=25) for n in graph_data["nodes"]]
-            # edges = [Edge(source=e["from"], target=e["to"]) for e in graph_data["edges"]]
-            # config = Config(width=750, height=600, directed=True)
-            # agraph(nodes=nodes, edges=edges, config=config)
-            
             st.markdown("---")
             st.markdown("### 📊 Graph Statistics")
             metrics_cols = st.columns(3)
@@ -536,16 +790,18 @@ with tab3:
         except Exception as e:
             st.error(f"Error loading graph data: {str(e)}")
 
-# Footer
-st.markdown("---")
-footer_col1, footer_col2, footer_col3 = st.columns(3)
-with footer_col2:
-    st.markdown(
-        """
-        <div style='text-align: center; color: #666; padding: 1rem;'>
-            <strong>Voice-to-RAG</strong> | Powered by Databricks<br>
-            <a href='https://github.com/Blackkadder/voice-to-rag' style='color: #1f77b4; text-decoration: none;'>📚 Documentation</a>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+def main():
+    """Main application entry point."""
+    if st.session_state.current_session is None:
+        render_landing_page()
+    else:
+        render_main_app()
+
+
+# Run the app
+main()
