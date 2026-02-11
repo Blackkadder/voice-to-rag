@@ -4,10 +4,16 @@ Simple Example: Upload Schema and Query PuppyGraph
 This is a simplified version that just:
 1. Uploads schema.json to PuppyGraph
 2. Queries the graph using Gremlin
+
+Usage:
+    python -m backend.agents.simple_example
+    python -m backend.agents.simple_example --schema schema_lineage.json
+    python -m backend.agents.simple_example --schema schema_lineage.json --force
 """
 
 import os
 import logging
+import argparse
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -27,10 +33,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main():
-    """Main example"""
+def main(schema_name: str = "schema.json", force: bool = False):
+    """
+    Main example
+    
+    Args:
+        schema_name: Name of schema file (default: "schema.json")
+        force: Force upload even if schema exists (default: False)
+    """
     print("="*80)
     print("PuppyGraph Simple Example")
+    print("="*80)
+    print(f"Schema: {schema_name}")
+    print(f"Force upload: {force}")
     print("="*80)
     
     # Initialize client
@@ -42,24 +57,26 @@ def main():
         password=os.getenv("PUPPYGRAPH_PASSWORD")
     )
     
-    # Step 1: Upload schema (skip if already exists)
-    print("\n1. Uploading schema to PuppyGraph...")
-    schema_path = Path(__file__).parent / "schema.json"
+    # Step 1: Upload schema
+    force_msg = " (FORCE)" if force else ""
+    print(f"\n1. Uploading schema to PuppyGraph{force_msg}...")
+    schema_path = Path(__file__).parent / schema_name
+    
+    if not schema_path.exists():
+        print(f"   ✗ Schema file not found: {schema_path}")
+        return
     
     try:
-        response = client.upload_schema(str(schema_path))
+        response = client.upload_schema(str(schema_path), force=force)
         if response.get("status") == "skipped":
             print(f"   ⊙ Schema already exists, skipped upload")
+            print(f"   Tip: Use --force to override existing schema")
         else:
             print(f"   ✓ Schema uploaded: {response}")
     except Exception as e:
         print(f"   ✗ Failed to upload schema: {e}")
         print("   Note: Make sure PuppyGraph HTTP API is running")
-        print("   Tip: Use force=True to override existing schema")
         # Continue anyway - schema might already be loaded
-    
-    # Option: Force re-upload if needed
-    # response = client.upload_schema(str(schema_path), force=True)
     
     # Step 2: Connect to Gremlin server
     print("\n2. Connecting to PuppyGraph Gremlin server...")
@@ -79,7 +96,7 @@ def main():
         print(f"      Total vertices: {vertex_count}")
         
         # Count by label
-        for label in ["person", "software"]:
+        for label in ["table"]:
             try:
                 count = client.count_vertices(label)
                 print(f"      {label}: {count}")
@@ -91,7 +108,7 @@ def main():
         edge_count = client.count_edges()
         print(f"      Total edges: {edge_count}")
         
-        for label in ["knowns", "created"]:
+        for label in ["lineage"]:
             try:
                 count = client.count_edges(label)
                 print(f"      {label}: {count}")
@@ -106,10 +123,10 @@ def main():
         
         # Custom Gremlin query
         print("\n   d) Custom Gremlin query:")
-        print("      Finding all persons...")
-        results = client.query("g.V().hasLabel('person').valueMap()")
-        for person in results[:3]:
-            print(f"      - {person}")
+        print("      Finding all tables...")
+        results = client.query("g.V().hasLabel('table').valueMap()")
+        for table in results[:3]:
+            print(f"      - {table}")
         
     except Exception as e:
         logger.error(f"Query failed: {e}", exc_info=True)
@@ -166,7 +183,26 @@ def example_advanced_queries():
 
 
 if __name__ == "__main__":
-    main()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Upload schema to PuppyGraph and query the graph"
+    )
+    parser.add_argument(
+        "--schema",
+        type=str,
+        default="schema.json",
+        help="Schema file name (default: schema.json)"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force upload even if schema exists"
+    )
+    
+    args = parser.parse_args()
+    
+    # Run main with parsed arguments
+    main(schema_name=args.schema, force=args.force)
     
     # Uncomment to run advanced examples
     # print("\n" + "="*80)
