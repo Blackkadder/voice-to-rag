@@ -1,11 +1,14 @@
 """
-OpenAI function tool for returning PuppyGraph Cypher queries.
+OpenAI function tools for PuppyGraph Cypher queries.
 
-The agent generates the Cypher (it has the schema in its system prompt).
-This tool simply receives and returns the query.
+- generate_cypher: Agent generates a Cypher query and returns it.
+- execute_cypher: Executes a Cypher query against PuppyGraph via the PuppyGraph client.
 """
 
 import json
+import os
+
+from puppygraph import PuppyGraphClient, PuppyGraphHostConfig
 
 from agent_utils import get_system_prompt
 
@@ -52,37 +55,26 @@ def build_tool_spec() -> dict:
 GENERATE_CYPHER_TOOL_SPEC = build_tool_spec()
 
 
-# --- Execute Cypher tool ---
+# --- Execute Cypher tool puppygraph ---
 
-def make_execute_cypher(client):
+def execute_cypher(cypher_query: str) -> str:
     """
-    Create an execute_cypher function with the PuppyGraph client bound.
+    Execute a Cypher query against PuppyGraph and return the results as JSON.
 
     Args:
-        client: A PuppyGraphClient instance (from simple_client.py).
+        cypher_query: The Cypher query string to execute.
 
     Returns:
-        A function(cypher_query: str) -> str that executes the query via Bolt.
+        JSON string of the query results.
     """
-    from neo4j import GraphDatabase
-
-    bolt_uri = f"bolt://{client.host}:7687"
-    driver = GraphDatabase.driver(
-        bolt_uri,
-        auth=(client.username, client.password),
-    )
-
-    def execute_cypher(cypher_query: str) -> str:
-        """Execute a Cypher query against PuppyGraph and return results."""
-        try:
-            with driver.session() as session:
-                result = session.run(cypher_query)
-                records = [dict(record) for record in result]
-            return json.dumps(records, indent=2, default=str)
-        except Exception as e:
-            return f"Error executing query: {e}"
-
-    return execute_cypher
+    host = os.getenv("PUPPYGRAPH_HOST", "localhost")
+    client = PuppyGraphClient(PuppyGraphHostConfig(host))
+    try:
+        res = client.cypher_query(cypher_query)
+        print(res)
+        return json.dumps(res, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 
 EXECUTE_CYPHER_TOOL_SPEC = {
@@ -91,14 +83,14 @@ EXECUTE_CYPHER_TOOL_SPEC = {
         "name": "execute_cypher",
         "description": (
             "Execute a PuppyGraph Cypher query and return the results. "
-            "Only pass valid Cypher queries."
+            "Pass the complete Cypher query as cypher_query."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "cypher_query": {
                     "type": "string",
-                    "description": "The Cypher query to execute (e.g., 'MATCH (t:table) RETURN id(t) LIMIT 10')",
+                    "description": "The PuppyGraph Cypher query string to execute (e.g., 'MATCH (t:table) RETURN id(t) LIMIT 10')",
                 },
             },
             "required": ["cypher_query"],

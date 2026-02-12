@@ -22,6 +22,7 @@ from unitycatalog.ai.core.base import get_uc_function_client
 from typing import Any, Callable, Generator, Optional
 import mlflow
 
+    
 
 
 class ToolInfo(BaseModel):
@@ -36,51 +37,6 @@ class ToolInfo(BaseModel):
     spec: dict
     exec_fn: Callable
 
-
-def create_tool_info(tool_spec, exec_fn_param: Optional[Callable] = None):
-    tool_spec["function"].pop("strict", None)
-    tool_name = tool_spec["function"]["name"]
-    udf_name = tool_name.replace("__", ".")
-
-    # Define a wrapper that accepts kwargs for the UC tool call,
-    # then passes them to the UC tool execution client
-    def exec_fn(**kwargs):
-        function_result = uc_function_client.execute_function(udf_name, kwargs)
-        if function_result.error is not None:
-            return function_result.error
-        else:
-            return function_result.value
-    return ToolInfo(name=tool_name, spec=tool_spec, exec_fn=exec_fn_param or exec_fn)
-
-
-TOOL_INFOS = []
-
-# You can use UDFs in Unity Catalog as agent tools
-# TODO: Add additional tools
-UC_TOOL_NAMES = []
-
-# uc_toolkit = UCFunctionToolkit(function_names=UC_TOOL_NAMES)
-# uc_function_client = get_uc_function_client()
-# for tool_spec in uc_toolkit.tools:
-#     TOOL_INFOS.append(create_tool_info(tool_spec))
-
-
-# Use Databricks vector search indexes as tools
-# See [docs](https://docs.databricks.com/generative-ai/agent-framework/unstructured-retrieval-tools.html) for details
-
-# # (Optional) Use Databricks vector search indexes as tools
-# # See https://docs.databricks.com/generative-ai/agent-framework/unstructured-retrieval-tools.html
-# # for details
-VECTOR_SEARCH_TOOLS = []
-# # TODO: Add vector search indexes as tools or delete this block
-# VECTOR_SEARCH_TOOLS.append(
-#         VectorSearchRetrieverTool(
-#         index_name="",
-#         # filters="..."
-#     )
-# )
-for vs_tool in VECTOR_SEARCH_TOOLS:
-    TOOL_INFOS.append(create_tool_info(vs_tool.tool, vs_tool.execute))
 
 
 def get_system_prompt() -> str:
@@ -99,15 +55,29 @@ def get_system_prompt() -> str:
 # PuppyGraph Cypher generation tool (natural language -> Cypher query)
 # NOTE: must be after get_system_prompt (cypher_tool imports it at load time)
 try:
-    from cypher_tool import GENERATE_CYPHER_TOOL_SPEC, generate_cypher
-except ImportError:
-    from .cypher_tool import GENERATE_CYPHER_TOOL_SPEC, generate_cypher
-
-TOOL_INFOS.append(
-    ToolInfo(
-        name="generate_cypher",
-        spec=GENERATE_CYPHER_TOOL_SPEC,
-        exec_fn=generate_cypher,
+    from cypher_tool import (
+        GENERATE_CYPHER_TOOL_SPEC, generate_cypher,
+        EXECUTE_CYPHER_TOOL_SPEC, execute_cypher,
     )
-)
+except ImportError:
+    from .cypher_tool import (
+        GENERATE_CYPHER_TOOL_SPEC, generate_cypher,
+        EXECUTE_CYPHER_TOOL_SPEC, execute_cypher,
+    )
+
+# TOOL_INFOS.append(
+#     ToolInfo(
+#         name="generate_cypher",
+#         spec=GENERATE_CYPHER_TOOL_SPEC,
+#         exec_fn=generate_cypher,
+#     )
+# )
+
+# TOOL_INFOS.append(
+#     ToolInfo(
+#         name="execute_cypher",
+#         spec=EXECUTE_CYPHER_TOOL_SPEC,
+#         exec_fn=execute_cypher,
+#     )
+# )
 
