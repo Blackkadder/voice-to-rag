@@ -2,7 +2,11 @@ streamlit>=1.28.0
 databricks-sdk>=0.18.0
 pandas>=2.0.0
 numpy>=1.24.0
-
+langgraph1.0.8
+backoff
+databricks-openai
+databricks-agents 
+mlflow-skinny
 # Optional: for enhanced graph visualization
 # streamlit-agraph>=0.0.45
 # pyvis>=0.3.2
