@@ -4,10 +4,15 @@ IMPORTANT: Gremlin query rules
 - All queries MUST start with g.V() or g.E().
 - Always end with .limit(N) to cap results (default 20).
 - Use .path() at the end of traversals when the result should be visualized as a graph.
-- Vertex IDs include a label prefix. Example: 'table[00vsdb.agent_analytics.agents_clean]'
+- Vertex IDs include a label prefix. Examples:
+    table:    'table[00vsdb.agent_analytics.agents_clean]'
+    workflow: 'workflow[12345-abcd-6789]'
 - Look up a vertex by ID with g.V('table[00vsdb.agent_analytics.agents_clean]').
-- Filter by label with .hasLabel('table').
+- Two vertex types: 'table' and 'workflow'.
+- Two edge types: 'lineage' (table → table) and 'created_by' (table → workflow).
+- Filter by label with .hasLabel('table') or .hasLabel('workflow').
 - Traverse outgoing edges with .outE('lineage'), incoming with .inE('lineage'), both with .bothE('lineage').
+- Traverse created_by edges with .outE('created_by') from a table to its workflow, or .inE('created_by') from a workflow to its tables.
 - After an edge step, move to the adjacent vertex with .inV(), .outV(), or .otherV().
 - Get vertex IDs with .id().
 - Get property values with .values('property_name').
@@ -35,10 +40,17 @@ Rule 4 - Early termination:
   INCORRECT: g.V().hasLabel('table').project('id', 'deg').by(id()).by(bothE('lineage').count()).limit(50)
 
 Notes
-- 'table_full_name' is used to compose the vertex ID but is NOT stored as a property.
+- 'table_full_name' is used to compose the table vertex ID but is NOT stored as a property.
   Use the vertex ID directly instead of .values('table_full_name').
+- 'workflow_id' is used to compose the workflow vertex ID but is NOT stored as a property.
+  Use the vertex ID directly instead of .values('workflow_id').
+- Ignore null workflows: some tables have no associated workflow, producing vertices with
+  ID 'workflow[null]'. Always filter these out with .has(id, neq('workflow[null]')) or
+  .not(hasId('workflow[null]')) when querying workflows.
 - For lineage questions, always traverse connected edges/vertices.
-- Edge direction: source_table --lineage--> target_table (outE = downstream, inE = upstream).
+- Edge directions:
+    lineage:    source_table --lineage--> target_table (outE = downstream, inE = upstream).
+    created_by: table --created_by--> workflow (the workflow that produced/transformed the table).
 
 Reference query patterns (adapt and combine these for the user's question):
 
@@ -68,6 +80,24 @@ g.V().hasLabel('table').project('id', 'deg').by(id()).by(bothE('lineage').limit(
 
 9. Multi-hop lineage (e.g. 2-hop downstream):
 g.V('table[00vsdb.agent_analytics.agents_clean]').repeat(outE('lineage').inV()).times(2).path()
+
+10. List all workflows:
+g.V().hasLabel('workflow').id().limit(20)
+
+11. Count workflows:
+g.V().hasLabel('workflow').count()
+
+12. Which workflow created a specific table:
+g.V('table[00vsdb.agent_analytics.agents_clean]').outE('created_by').inV().path()
+
+13. All tables created by a specific workflow:
+g.V('workflow[12345-abcd-6789]').inE('created_by').outV().path()
+
+14. Full lineage of a table including its workflow:
+g.V('table[00vsdb.agent_analytics.agents_clean]').union(bothE('lineage').path(), outE('created_by').path()).limit(20)
+
+15. Tables and workflows connected to a table (all edge types):
+g.V('table[00vsdb.agent_analytics.agents_clean]').bothE().path()
 
 
 Schema
@@ -108,6 +138,29 @@ Schema
               "type": "String",
               "field": "table_type",
               "alias": "table_type"
+            }
+          ]
+        }
+      },
+      {
+        "label": "workflow",
+        "manyToOne": {
+          "sources": [
+            {
+              "source": {
+                "catalog": "jinlinhe_demo",
+                "schema": "graph_schema",
+                "table": "system_lineage_entity_vertex"
+              },
+              "id": {
+                "fields": [
+                  {
+                    "type": "STRING",
+                    "field": "workflow_id",
+                    "alias": "puppy_id0"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -187,7 +240,97 @@ Schema
             "alias": "event_time"
           }
         ]
+      },
+      {
+        "label": "created_by",
+        "fromVertex": "table",
+        "toVertex": "workflow",
+        "tableSource": {
+          "catalog": "jinlinhe_demo",
+          "schema": "graph_schema",
+          "table": "system_lineage_edge_table"
+        },
+        "id": {
+          "fields": [
+            {
+              "type": "STRING",
+              "field": "entity_id",
+              "alias": "puppy_id_entity_id"
+            }
+          ]
+        },
+        "fromId": {
+          "fields": [
+            {
+              "type": "STRING",
+              "field": "source_table_full_name",
+              "alias": "puppy_from_source_table_full_name"
+            }
+          ]
+        },
+        "toId": {
+          "fields": [
+            {
+              "type": "STRING",
+              "field": "entity_id",
+              "alias": "workflow_id"
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "type": "STRING",
+            "field": "record_id",
+            "alias": "record_id"
+          },
+          {
+            "type": "STRING",
+            "field": "entity_type",
+            "alias": "entity_type"
+          },
+          {
+            "type": "STRING",
+            "field": "entity_id",
+            "alias": "entity_id"
+          },
+          {
+            "type": "STRING",
+            "field": "entity_run_id",
+            "alias": "entity_run_id"
+          },
+          {
+            "type": "STRING",
+            "field": "source_table_full_name",
+            "alias": "source_table_full_name"
+          },
+          {
+            "type": "STRING",
+            "field": "target_table_full_name",
+            "alias": "target_table_full_name"
+          },
+          {
+            "type": "STRING",
+            "field": "source_type",
+            "alias": "source_type"
+          },
+          {
+            "type": "STRING",
+            "field": "target_type",
+            "alias": "target_type"
+          },
+          {
+            "type": "STRING",
+            "field": "created_by",
+            "alias": "created_by"
+          },
+          {
+            "type": "DATETIME",
+            "field": "event_time",
+            "alias": "event_time"
+          }
+        ]
       }
     ]
   }
 }
+

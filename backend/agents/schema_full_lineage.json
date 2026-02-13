@@ -38,6 +38,29 @@
             }
           ]
         }
+      },
+      {
+        "label": "workflow",
+        "manyToOne": {
+          "sources": [
+            {
+              "source": {
+                "catalog": "jinlinhe_demo",
+                "schema": "graph_schema",
+                "table": "system_lineage_entity_vertex"
+              },
+              "id": {
+                "fields": [
+                  {
+                    "type": "STRING",
+                    "field": "workflow_id",
+                    "alias": "puppy_id0"
+                  }
+                ]
+              }
+            }
+          ]
+        }
       }
     ],
     "edges": [
@@ -110,6 +133,95 @@
           },
           {
             "type": "DateTime",
+            "field": "event_time",
+            "alias": "event_time"
+          }
+        ]
+      },
+      {
+        "label": "created_by",
+        "fromVertex": "table",
+        "toVertex": "workflow",
+        "tableSource": {
+          "catalog": "jinlinhe_demo",
+          "schema": "graph_schema",
+          "table": "system_lineage_edge_table"
+        },
+        "id": {
+          "fields": [
+            {
+              "type": "STRING",
+              "field": "entity_id",
+              "alias": "puppy_id_entity_id"
+            }
+          ]
+        },
+        "fromId": {
+          "fields": [
+            {
+              "type": "STRING",
+              "field": "source_table_full_name",
+              "alias": "puppy_from_source_table_full_name"
+            }
+          ]
+        },
+        "toId": {
+          "fields": [
+            {
+              "type": "STRING",
+              "field": "entity_id",
+              "alias": "workflow_id"
+            }
+          ]
+        },
+        "attributes": [
+          {
+            "type": "STRING",
+            "field": "record_id",
+            "alias": "record_id"
+          },
+          {
+            "type": "STRING",
+            "field": "entity_type",
+            "alias": "entity_type"
+          },
+          {
+            "type": "STRING",
+            "field": "entity_id",
+            "alias": "entity_id"
+          },
+          {
+            "type": "STRING",
+            "field": "entity_run_id",
+            "alias": "entity_run_id"
+          },
+          {
+            "type": "STRING",
+            "field": "source_table_full_name",
+            "alias": "source_table_full_name"
+          },
+          {
+            "type": "STRING",
+            "field": "target_table_full_name",
+            "alias": "target_table_full_name"
+          },
+          {
+            "type": "STRING",
+            "field": "source_type",
+            "alias": "source_type"
+          },
+          {
+            "type": "STRING",
+            "field": "target_type",
+            "alias": "target_type"
+          },
+          {
+            "type": "STRING",
+            "field": "created_by",
+            "alias": "created_by"
+          },
+          {
+            "type": "DATETIME",
             "field": "event_time",
             "alias": "event_time"
           }
