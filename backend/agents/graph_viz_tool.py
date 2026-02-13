@@ -153,8 +153,21 @@ def _draw_lineage_graph(G: nx.DiGraph, title: str = "Table Lineage Graph") -> No
     node_radius_pts = math.sqrt(max_node_size)
 
     # -- Colour palette ----------------------------------------------------
-    NODE_COLOR = "#D6E9F8"
-    NODE_EDGE_COLOR = "#4A90D9"
+    # Per-type node colours: table → red, workflow → blue, fallback → grey
+    TYPE_COLORS = {
+        "table":    {"fill": "#F8D6D6", "edge": "#D94A4A"},
+        "workflow": {"fill": "#D6D9F8", "edge": "#4A4AD9"},
+    }
+    DEFAULT_TYPE_COLOR = {"fill": "#E0E0E0", "edge": "#888888"}
+
+    node_fill_colors = []
+    node_edge_colors = []
+    for nid in G.nodes():
+        ntype = G.nodes[nid].get("node_label", "").lower()
+        palette = TYPE_COLORS.get(ntype, DEFAULT_TYPE_COLOR)
+        node_fill_colors.append(palette["fill"])
+        node_edge_colors.append(palette["edge"])
+
     NODE_EDGE_WIDTH = 2.0
     LABEL_COLOR = "#1A1A1A"
     EDGE_COLOR = "#666666"
@@ -182,8 +195,8 @@ def _draw_lineage_graph(G: nx.DiGraph, title: str = "Table Lineage Graph") -> No
     # -- Nodes (sized by degree) -------------------------------------------
     nx.draw_networkx_nodes(
         G, pos, ax=ax,
-        node_color=NODE_COLOR, node_size=node_sizes,
-        edgecolors=NODE_EDGE_COLOR, linewidths=NODE_EDGE_WIDTH,
+        node_color=node_fill_colors, node_size=node_sizes,
+        edgecolors=node_edge_colors, linewidths=NODE_EDGE_WIDTH,
     )
     nx.draw_networkx_labels(
         G, pos, ax=ax,
