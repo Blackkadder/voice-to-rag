@@ -12,7 +12,8 @@ IMPORTANT: Gremlin query rules
 - Get vertex IDs with .id().
 - Get property values with .values('property_name').
 - Count results with .count().
-- Do NOT use Cypher syntax (MATCH, WHERE, RETURN, etc.).
+- Filter by count with .where(select('key').is(gt(N))) or .where(select('key').is(lt(N))).
+- You may combine the steps above to build new queries. Use the reference patterns below as building blocks and adapt them to answer the user's question.
 
 PERFORMANCE RULES (prevent timeouts from supernodes and full-graph scans):
 
@@ -39,7 +40,7 @@ Notes
 - For lineage questions, always traverse connected edges/vertices.
 - Edge direction: source_table --lineage--> target_table (outE = downstream, inE = upstream).
 
-Supported query patterns (use ONLY these as templates):
+Reference query patterns (adapt and combine these for the user's question):
 
 1. Lineage of a specific table (both directions):
 g.V('table[00vsdb.agent_analytics.agents_clean]').bothE('lineage').path()
@@ -61,6 +62,12 @@ g.V().hasLabel('table').count()
 
 7. Neighbors of a specific table (vertices only):
 g.V('table[00vsdb.agent_analytics.agents_clean]').both('lineage').id()
+
+8. Tables filtered by dependency count (e.g. tables with more than N lineage edges):
+g.V().hasLabel('table').project('id', 'deg').by(id()).by(bothE('lineage').limit(100).count()).where(select('deg').is(gt(N))).order().by(select('deg'), desc).limit(10)
+
+9. Multi-hop lineage (e.g. 2-hop downstream):
+g.V('table[00vsdb.agent_analytics.agents_clean]').repeat(outE('lineage').inV()).times(2).path()
 
 
 Schema
